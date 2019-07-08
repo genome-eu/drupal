@@ -1,0 +1,184 @@
+<?php
+
+use Drupal\genome\Scriney;
+use Drupal\genome\Lib\Util\SignatureHelper;
+
+/**
+ * @file
+ * Implements the Genome payment method for Drupal Commerce checkout.
+ */
+
+function genome_menu()
+{
+    $items = array();
+    
+	$items['admin/settings/genome'] = array(
+		'title' => 'Genome',
+		'description' => 'Required Genome settings',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('genome_form'),
+		'access arguments' => array('administer users'),
+		'type' => MENU_NORMAL_ITEM,
+   );
+
+    return $items;
+}
+
+function genome_form($form, &$form_state)
+{
+		
+    $form['genome_public_key'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Genome public key'),
+            '#default_value' => variable_get('genome_public_key', ''),
+            '#maxlength' => 255,
+            '#description' => t("The Genome pulic key value"),
+            '#required' => TRUE,
+    );
+
+    $form['genome_secret_key'] = array(
+            '#type' => 'textfield',
+            '#title' => t('Genome secret key'),
+            '#default_value' => variable_get('genome_secret_key', ''),
+            '#maxlength' => 255,
+            '#description' => t("The Genome secret key value"),
+            '#required' => TRUE,
+    );  	
+
+    return system_settings_form($form);
+}
+
+function genome_commerce_payment_method_info()
+{
+    $payment_methods = array();
+
+    $payment_methods['genome'] = array(
+        'title' => t( 'Genome' ),
+        'description' => t( 'Integrates with the Genome payment gateway.' ),
+        'active' => true, 
+        'offsite' => true,
+        'offsite_autoredirect' => true,        
+    );
+
+    return $payment_methods;
+}
+
+function genome_redirect_form($form, &$form_state, $order, $payment_method)
+{
+	
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);	
+    $order_total = $order_wrapper->commerce_order_total->amount->value()/100;
+
+    $form['#after_build'][] = 'genome_form_add_signature';
+    $form['#pre_render'][] = 'genome_form_modify';
+
+    $form['#action'] = 'https://hpp-service.genome.eu/hpp';
+
+    $form['key'] = array(
+        '#type' => 'hidden',
+        '#value' => variable_get('genome_public_key', ''),
+    );
+
+    $form['amount'] = array(
+        '#type' => 'hidden',
+        '#value' => $order_total,
+    );
+
+    $form['uniqueuserid'] = array(
+        '#type' => 'hidden',
+        '#value' => $order_wrapper->mail->value(),
+    );
+
+    $form['email'] = array(
+        '#type' => 'hidden',
+        '#value' => $order_wrapper->mail->value(),
+    );
+
+    $form['customProduct'] = array(
+        '#type' => 'hidden',
+        '#value' => '[{"productType":"fixedProduct","productId":"'.$order_wrapper->order_number->value().
+        '","productName":"Order id #'.$order_wrapper->order_number->value().
+        '","currency":"'.$order_wrapper->commerce_order_total->currency_code->value().'","amount":'.$order_total.'}]',
+    );
+    
+    $form['success_url'] = array(
+        '#type' => 'hidden',
+        '#value' => url('checkout/' . $order->order_id . '/payment/return/' . $order->data['payment_redirect_key'], array('absolute' => TRUE)),
+    );
+ 
+    $form['decline_url'] = array(
+        '#type' => 'hidden',
+        '#value' => url('checkout/' . $order->order_id . '/payment/back/' . $order->data['payment_redirect_key'], array('absolute' => TRUE)),
+    );
+
+    $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Pay'),
+    );
+
+    return $form;
+  
+}
+
+function genome_form_add_signature($form)
+{
+    
+    $params = [
+        'amount' => (string) $form['amount']['#value'],
+        "customProduct" =>  $form['customProduct']['#value'],
+        "email" => $form['email']['#value'],
+        "key" => $form['key']['#value'],
+        "uniqueuserid" => $form['uniqueuserid']['#value'],
+        "success_url" => $form['success_url']['#value'],
+        "decline_url" => $form['decline_url']['#value'],
+    ];
+    
+    $signature = (new SignatureHelper())->generate($params, variable_get('genome_secret_key'), true);
+
+    $form['signature'] = array(
+            '#type' => 'hidden',
+            '#value' => $signature,
+    );
+
+    return $form;
+}
+
+/**
+ * Removing unneccessary data from submit form
+ */
+function genome_form_modify($form)
+{    
+    unset($form['form_token']);
+    unset($form['form_build_id']);
+    unset($form['form_id']);
+
+    return $form;
+}
+
+function genome_redirect_form_validate($order, $payment_method) {
+    
+    $scriney = new Scriney(variable_get('genome_public_key'), variable_get('genome_secret_key'));
+    
+    if ($scriney->validateCallback($_POST)) {
+        return true;
+    } else {
+        return false;
+    }
+
+}
+ 
+function genome_redirect_form_submit($order, $payment_method) {
+	
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+   
+  $transaction = commerce_payment_transaction_new('genome', $order->order_id);
+  $transaction->instance_id = $payment_method['instance_id'];
+  $transaction->amount = $order_wrapper->commerce_order_total->amount->value();
+  $transaction->currency_code = $order_wrapper->commerce_order_total->currency_code->value();
+  $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+  $transaction->message = t('The payment has completed.');
+  commerce_payment_transaction_save($transaction);
+  
+}
+
+  

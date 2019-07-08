@@ -1,0 +1,59 @@
+<?php
+
+/**
+ * @file
+ * Installs the tables required by Commerce Genome.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function genome_schema() {
+	
+	$schema = array();
+
+    $schema['genome_settings'] = array(
+    'description' => 'Stores Genome settings.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'settings id - primary key',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    'public_key' => array(
+        'description' => 'genome public key',
+        'type' => 'varchar',
+        'length' => 255,        
+        'default' => '',
+      ),
+    'secret_key' => array(
+        'description' => 'genome secret key',
+        'type' => 'varchar',
+        'length' => 255,        
+        'default' => '',
+      ),     
+    'iframe_width' => array(
+        'description' => 'genome iframe width in pixels',
+        'type' => 'int',        
+        'not null' => TRUE,
+        'default' => 800,
+      ), 
+	'iframe_height' => array(
+        'description' => 'genome iframe height in pixels',
+        'type' => 'int',        
+        'not null' => TRUE,
+        'default' => 300,
+      ), 
+	'debug_mode' => array(
+        'description' => 'genome debug mode switcher',
+        'type' => 'int',        
+        'not null' => TRUE,
+        'default' => 0,
+      ),       
+    ),
+    'primary key' => array('id'),        
+  );
+
+  return $schema;
+}

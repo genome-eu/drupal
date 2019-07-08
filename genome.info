@@ -1,0 +1,10 @@
+name = Genome
+description = Implements the Genome API with Drupal Commerce.
+package = Commerce
+dependencies[] = commerce
+dependencies[] = commerce_payment
+dependencies[] = xautoload (>= 7.x-5.0)
+core = 7.x
+
+version = "7.x-1.x-dev"
+core = "7.x"
